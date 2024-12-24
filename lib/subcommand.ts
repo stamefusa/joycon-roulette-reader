@@ -2,6 +2,50 @@ import crc8 from 'crc/crc8';
 import { Byte } from './common.js';
 
 namespace SubCommand {
+
+    export abstract class ResponseBase {
+        private _id: Byte;
+        protected _data: Buffer;
+
+        constructor(data: Buffer) {
+            this._id = data[0] as Byte;
+            this._data = data.slice(1);
+        }
+
+        get id(): Byte {
+            return this._id;
+        }
+
+        get data(): Buffer {
+            return this._data;
+        }
+    }
+
+    
+    export class SubCommandReply {
+        private _ack: number;
+        private _subcmdId: Byte;
+        private _data: Buffer;
+
+        constructor(data: Buffer) {
+            this._ack = data.readUInt8(0);
+            this._subcmdId = data.readUInt8(1) as Byte;
+            this._data = data.subarray(2);
+        }
+
+        get ack(): number {
+            return this._ack;
+        }
+
+        get id(): Byte {
+            return this._subcmdId;
+        }
+
+        get data(): Buffer {
+            return this._data;
+        }
+    }
+
     export abstract class RequestBase {
         private _id: Byte;
         protected _data: Buffer;
@@ -13,6 +57,14 @@ namespace SubCommand {
 
         getData(): Buffer {
             return Buffer.from([this._id, ...this._data]);
+        }
+
+        get id(): Byte {
+            return this._id;
+        }
+
+        toString(): string {
+            return `${this.constructor.name}: ${this._data.toString('hex')}`;
         }
     }
 
@@ -29,11 +81,6 @@ namespace SubCommand {
     };
 
     export class SetInputReportModeRequest extends RequestBase {
-
-        static readonly STANDARD_FULL = 0x30;
-        static readonly MCU_NFC_IR = 0x31;
-        static readonly SIMPLE_HID = 0x3F;
-
         constructor(mode: InputReportMode) {
             super(0x03);
             this._data = Buffer.from([mode]);
@@ -103,20 +150,27 @@ namespace SubCommand {
         }
     }
 
-    export class GetMCUExternalDevice_59 extends RequestBase {
+    export class UnknownMCUExternalDevice_58 extends RequestBase {
+        constructor(arg1: Byte, arg2: Byte, arg3: Byte, arg4: Byte) {
+            super(0x58);
+            this._data = Buffer.from([arg1, arg2, arg3, arg4]);
+        }
+    }
+
+    export class GetExternalDeviceInfo extends RequestBase {
         constructor() {
             super(0x59);
         }
     }
 
-    export class UnknownMCU_5A extends RequestBase {
+    export class EnableExternalDevicePolling extends RequestBase {
         constructor(data: Buffer | Uint8Array) {
             super(0x5A);
             this._data = Buffer.from(data);
         }
     }
 
-    export class UnknownMCU_5C extends RequestBase {
+    export class SetExternalDeviceConfig extends RequestBase {
         constructor(data: Buffer | Uint8Array) {
             super(0x5C);
             this._data = Buffer.from(data);
