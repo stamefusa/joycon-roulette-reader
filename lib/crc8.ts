@@ -11,13 +11,13 @@ for (let i = 0; i < 256; i++) {
             crc <<= 1;
         }
     }
-    CRC8_TABLE[i] = (crc & 0xFF) as Byte;
+    CRC8_TABLE[i] = (crc & 0xff) as Byte;
 }
 
 function crc8(data: number[] | Buffer): Byte {
     let cc: Byte = 0x00;
-    for (let byte of data) {
-        cc = CRC8_TABLE[(cc ^ byte) & 0xFF];
+    for (const byte of data) {
+        cc = CRC8_TABLE[(cc ^ byte) & 0xff];
     }
     return cc;
 }
