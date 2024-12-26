@@ -273,13 +273,16 @@ class Joycon extends EventEmitter {
             // do nothing
         } else if (firstTime) {
             if (!noDevice) {
+                // Already connected
                 detected = true;
             }
         } else if (stateChanged) {
             if (maybeJoycon) {
                 if (!noDevice && !extDeviceInitialized) {
+                    // Has an ext device and not initialized yet
                     detected = true;
                 } else if (!extDeviceInitialized && extDevicePreviouslyInitialized) {
+                    // Ext device newly uninitialized
                     removed = true;
                 }
             }
