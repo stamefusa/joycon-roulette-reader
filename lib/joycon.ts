@@ -258,37 +258,47 @@ class Joycon extends EventEmitter {
             return;
         }
 
-        try {
-            if (
-                (this.previousState && this.previousState.connectionInfo !== report.connectionInfo) ||
-                (this.previousState === null && (report.connectionInfo & 0x1) === 0x0)
-            ) {
-                // 0x8: perhaps joycon
-                // 0x4, 0x2: ext device type?
-                // 0x1: connected?
-                if ((report.connectionInfo & 0x8) !== 0x8) {
-                    return;
-                }
+        const extDeviceInitialized = (report.connectionInfo & 0x01) === 0x01;
+        const extDevicePreviouslyInitialized = (this.previousState?.connectionInfo & 0x01) === 0x01;
+        const noDevice = (report.connectionInfo & 0x6) === 0x6;
+        const maybeJoycon = report.connectionInfo & 0x8;
+        const firstTime = this.previousState === null;
 
-                if ((report.connectionInfo & 0x6) === 0x6) {
-                    // Device disconnected?
-                    this.debugPrint('Device disconnected');
-                    this.disposeExternalDevice();
-                    this.emit(EXT_DEVICE_DISCONNECTED);
-                } else if (
-                    (report.connectionInfo & 0x1) === 0x0 &&
-                    (this.previousState?.connectionInfo & 0x01) === 0x00
-                ) {
-                    // just uninitialized == disconnected?
-                    this.debugPrint(
-                        'Device connection detected:',
-                        this.previousState?.connectionInfo,
-                        'to',
-                        report.connectionInfo
-                    );
-                    console.log('External device detected. Initializing...');
-                    this.findExternalDevice();
+        const stateChanged = this.previousState && this.previousState.connectionInfo !== report.connectionInfo;
+
+        let detected = false;
+        let removed = false;
+
+        if (!maybeJoycon) {
+            // do nothing
+        } else if (firstTime) {
+            if (!noDevice) {
+                detected = true;
+            }
+        } else if (stateChanged) {
+            if (maybeJoycon) {
+                if (!noDevice && !extDeviceInitialized) {
+                    detected = true;
+                } else if (!extDeviceInitialized && extDevicePreviouslyInitialized) {
+                    removed = true;
                 }
+            }
+        }
+
+        try {
+            if (detected) {
+                this.debugPrint(
+                    'Device connection detected:',
+                    this.previousState?.connectionInfo,
+                    'to',
+                    report.connectionInfo
+                );
+                console.log('External device detected. Initializing...');
+                this.findExternalDevice();
+            } else if (removed) {
+                this.debugPrint('Device disconnected');
+                this.disposeExternalDevice();
+                this.emit(EXT_DEVICE_DISCONNECTED);
             }
         } catch (err) {
             console.error('Error processing previous state', err);
