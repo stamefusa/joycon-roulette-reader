@@ -3,25 +3,32 @@ import { setTimeout } from 'timers/promises';
 import { RouletteDevice } from './lib/devices/roulette.js';
 import { RingconDevice } from './lib/devices/ringcon.js';
 import { ExternalDeviceType } from './lib/devices/base.js';
+import * as winston from 'winston';
 
-const joycon = new Joycon();
+const logger = winston.createLogger({
+    level: 'info', //'debug',
+    format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
+    transports: [new winston.transports.Console()]
+});
+const joycon = new Joycon({ logger });
+
 let rouletteDevice: RouletteDevice;
 let ringconDevice: RingconDevice;
 
 function onRouletteNumber(rawNumber: number, stableNumber: number) {
-    console.log('number:', stableNumber);
+    logger.info(`number: ${stableNumber}`);
     // or read the number from RouletteDevice instance from whereever you want
     // console.log('number:', rouletteDevice.number);
 }
 
 function onRingconPower(power: number) {
-    console.log('power:', power);
+    logger.info(`power: ${power}`);
 }
 
 joycon.onExternalDeviceConnected(async (device: ExternalDeviceType) => {
-    console.log('External device connected:', device);
+    logger.info(`External device connected: ${device}`);
     switch (device) {
-        case RingconDevice.deviceId:
+        case ExternalDeviceType.RINGCON:
             ringconDevice = new RingconDevice(joycon);
             await ringconDevice.initialize();
             ringconDevice.on('power', onRingconPower);
@@ -32,13 +39,13 @@ joycon.onExternalDeviceConnected(async (device: ExternalDeviceType) => {
             rouletteDevice.on('rouletteNumber', onRouletteNumber);
             break;
         default:
-            console.log('Unsupported device connected');
+            logger.error('Unsupported device connected');
             break;
     }
 });
 
 joycon.onExternalDeviceDisconnected(() => {
-    console.log('External device disconnected');
+    logger.info('External device disconnected');
     if (rouletteDevice) {
         rouletteDevice.dispose();
         rouletteDevice = null;
@@ -51,14 +58,14 @@ joycon.onExternalDeviceDisconnected(() => {
 });
 
 joycon.onDisconnected(() => {
-    console.log('JoyCon disconnected');
+    logger.info('JoyCon disconnected');
     rouletteDevice = ringconDevice = null;
 });
 
 while (true) {
-    console.log('Finding JoyCon-R');
+    logger.info('Finding JoyCon-R');
     const devices = Joycon.findDevices();
-    console.log(devices);
+    logger.verbose(JSON.stringify(devices));
 
     if (devices.length === 0) {
         await setTimeout(1000);
@@ -66,7 +73,7 @@ while (true) {
     }
     const deviceOpened = await joycon.openDevice(devices[0]);
     if (!deviceOpened) {
-        console.log("Couldn't open device");
+        logger.error("Couldn't open device");
         joycon.close();
         continue;
     }

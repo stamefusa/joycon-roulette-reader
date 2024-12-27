@@ -1,6 +1,7 @@
 import { Joycon } from '../joycon.js';
 import { EventEmitter } from 'events';
 import { setTimeout } from 'timers/promises';
+import * as winston from 'winston';
 
 export enum ExternalDeviceType {
     RINGCON = 0x20,
@@ -8,6 +9,7 @@ export enum ExternalDeviceType {
 }
 export abstract class ExternalDevice extends EventEmitter {
     protected joycon: Joycon;
+    protected debugMode = false;
 
     constructor(joycon: Joycon) {
         super();
@@ -18,8 +20,16 @@ export abstract class ExternalDevice extends EventEmitter {
         return 0 as ExternalDeviceType;
     }
 
+    static get deviceName(): string {
+        return 'Not configured';
+    }
+
     async initialize(): Promise<boolean> {
         return true;
+    }
+
+    protected get logger(): winston.Logger {
+        return this.joycon.logger;
     }
 
     protected async sendRumbleOnConnected(): Promise<void> {

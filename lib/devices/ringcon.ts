@@ -2,8 +2,6 @@ import { ExternalDevice, ExternalDeviceType } from './base.js';
 import { Joycon } from '../joycon.js';
 import * as SC from '../subcommand.js';
 import * as IR from '../reports.js';
-import { setTimeout } from 'timers/promises';
-
 export class RingconDevice extends ExternalDevice {
     private currentCallback: (data: IR.StandardFullReport) => Promise<void> | null = null;
 
@@ -15,27 +13,27 @@ export class RingconDevice extends ExternalDevice {
         return 0x20;
     }
 
+    static override get deviceName(): string {
+        return 'Ringcon';
+    }
+
     override async initialize(): Promise<boolean> {
-        let result: SC.SubCommandReply;
-        console.log('========== Initializing Ringcon ==========');
+        this.logger.verbose('========== Initializing Ringcon ==========');
         // enable IMU
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.EnableIMU6AxisSensorRequest(3));
-        console.log('RESULT', result);
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.EnableIMU6AxisSensorRequest(3));
 
         // Set input report mode to standard full if not already set
         //result = await this.joycon.sendSubcommandAndWaitAsync(new SC.SetInputReportModeRequest(SC.InputReportMode.STANDARD_FULL));
 
         // 5C
-        result = await this.joycon.sendSubcommandAndWaitAsync(
+        await this.joycon.sendSubcommandAndWaitAsync(
             new SC.SetExternalDeviceConfig(Buffer.from([0x06, 0x03, 0x25, 0x06]))
         );
-        console.log('RESULT', result);
 
         // 5A
-        result = await this.joycon.sendSubcommandAndWaitAsync(
+        await this.joycon.sendSubcommandAndWaitAsync(
             new SC.EnableExternalDevicePolling(new Uint8Array([0x04, 0x01, 0x01, 0x02]))
         );
-        console.log('RESULT', result);
 
         // 58
         /*
@@ -80,28 +78,17 @@ export class RingconDevice extends ExternalDevice {
         // 0x04 0x04 0x1a 0x02 -> 0x00 0x14 0x00 0x00 0x00 0x00 0xfe 0xca 0x86 0x00 0xfe 0xca 0x86 0x00 0x31 0x10 0xf5 0x00
         // 0x04 0x04 0x32 0x02 -> 0x00 0x08 0x00 0x00 0x00 0x00 0x03 0x00 0x00 0x81
         // 0x04 0x05 0x01 0x02 -> 0x00 0x08 0x00 0x00 0x00 0x00 0x01 0x00
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 5, 1, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 5, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0xa, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0x32, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 1, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0xa, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
-        console.log('RESULT', result);
-        result = await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0x1a, 2));
-        console.log('RESULT', result);
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 5, 1, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 5, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0xa, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0x32, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 1, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0xa, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 0, 0, 2));
+        await this.joycon.sendSubcommandAndWaitAsync(new SC.UnknownMCUExternalDevice_58(4, 4, 0x1a, 2));
 
         // no need to wait
         this.sendRumbleOnConnected();
@@ -118,7 +105,7 @@ export class RingconDevice extends ExternalDevice {
     }
 
     override dispose(): void {
-        console.log('Ringcon disconnected');
+        this.logger.info('Ringcon disconnected');
         this.joycon.removeListenerForStandardFullReport(this.currentCallback);
     }
 }

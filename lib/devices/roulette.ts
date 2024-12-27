@@ -17,12 +17,16 @@ export class RouletteDevice extends ExternalDevice {
         return ExternalDeviceType.ROULETTE;
     }
 
+    static override get deviceName(): string {
+        return 'Roulette';
+    }
+
     get number(): number {
         return this.currentNumber;
     }
 
     override async initialize(): Promise<boolean> {
-        console.log('========== Initializing Roulette ==========');
+        this.joycon.logger.verbose('========== Initializing Roulette ==========');
         // enable IMU - move to Joycon class?
         await this.joycon.sendSubcommandAndWaitAsync(new SC.EnableIMU6AxisSensorRequest(3));
 
@@ -85,7 +89,7 @@ export class RouletteDevice extends ExternalDevice {
     }
 
     override dispose(): void {
-        console.log('Roulette disconnected');
+        this.logger.info('Roulette disconnected');
         this.joycon.removeListenerForStandardFullReport(this.currentCallback);
     }
 }

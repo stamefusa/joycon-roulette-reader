@@ -5,6 +5,7 @@ import * as IR from './reports.js';
 import { Byte } from './common.js';
 import { ExternalDevice } from './devices/base.js';
 import { setTimeout as sleep } from 'timers/promises';
+import * as winston from 'winston';
 
 // JoyCon R
 const VENDOR_ID = 1406;
@@ -47,15 +48,21 @@ class Joycon extends EventEmitter {
     private latestSubcommandReports: { [key: number]: Report } = {};
     private previousState: IR.StandardReportBase | null = null;
     private initialized: boolean = false;
-    private debugMode = false;
 
     private _serialNumber: string = '';
     private _deviceType: DeviceType | null = null;
     private _firmwareVersion: string = '';
+    private _logger: winston.Logger;
 
-    constructor(debug: boolean = false) {
+    constructor(opts: { logger?: winston.Logger }) {
         super();
-        this.debugMode = debug;
+        this._logger =
+            opts.logger ||
+            winston.createLogger({
+                level: 'fatal',
+                format: winston.format.simple(),
+                transports: []
+            });
     }
 
     static findDevices(): DeviceInfo[] {
@@ -70,6 +77,10 @@ class Joycon extends EventEmitter {
         return [];
     }
 
+    get logger(): winston.Logger {
+        return this._logger;
+    }
+
     async openDevice(deviceInfo: DeviceInfo): Promise<boolean> {
         if (this.device !== null) {
             return false;
@@ -82,8 +93,8 @@ class Joycon extends EventEmitter {
 
             await this.initializeDevice();
         } catch (err) {
-            console.error('Error opening device', err);
-            return Promise.resolve(false);
+            this.logger.error(err, 'Error opening device');
+            return false;
         }
 
         return Promise.resolve(true);
@@ -128,18 +139,14 @@ class Joycon extends EventEmitter {
             this._serialNumber = serialNumber.SPIData.toString('ascii');
         }
 
-        console.log('Serial number:', this._serialNumber);
+        this.logger.info(`Serial number: ${this._serialNumber}`);
 
         const colors = (await this.sendSubcommandAndWaitAsync(new SC.ReadSPI(0x6050, 0x0d))) as SC.ReadSPIResponse;
-        this.debugPrint(
-            'Body color:',
-            colors.SPIData.subarray(0, 3).toString('hex'),
-            'Button color:',
-            colors.SPIData.subarray(3, 6).toString('hex'),
-            'Grip(L)',
-            colors.SPIData.subarray(6, 9).toString('hex'),
-            'Grip(R)',
-            colors.SPIData.subarray(9, 12).toString('hex')
+        this.logger.info(
+            `Body color: ${colors.SPIData.subarray(0, 3).toString('hex')}, ` +
+                `Button color: ${colors.SPIData.subarray(3, 6).toString('hex')}, ` +
+                `Grip(L): ${colors.SPIData.subarray(6, 9).toString('hex')}, ` +
+                `Grip(R): ${colors.SPIData.subarray(9, 12).toString('hex')}`
         );
 
         await this.sendSubcommandAndWaitAsync(new SC.ReadSPI(0x6080, 0x18));
@@ -155,13 +162,6 @@ class Joycon extends EventEmitter {
         }
 
         this.device = null;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private debugPrint(...args: any[]): void {
-        if (this.debugMode) {
-            console.log(...args);
-        }
     }
 
     getLatestSubcommandReportForId(cmdId: number): Report | undefined {
@@ -182,21 +182,20 @@ class Joycon extends EventEmitter {
                 this.processMCU(new IR.MCUReport(data));
                 break;
             case 0x63:
-                this.debugPrint('Maybe reconnect request?', type, data);
+                this.logger.warn('Maybe reconnect request?', type, data);
                 break;
             default:
-                this.debugPrint('Not implemented: ', type, data);
+                this.logger.warn('Not implemented: ', type, data);
         }
     }
 
     private async findExternalDevice(): Promise<boolean> {
-        this.debugPrint('finding external device');
+        this.logger.verbose('finding external device');
 
         try {
             let result: SC.SubCommandReply = await this.sendSubcommandAndWaitAsync(
                 new SC.SetMCUStateRequest(SC.MCUState.RESUME)
             );
-            this.debugPrint('RESULT', result);
 
             // need sleep?
             await sleep(200);
@@ -208,7 +207,6 @@ class Joycon extends EventEmitter {
             //  not ready: (a0) 21 1 0 0 0 8 0 1b 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 48
             for (let i = 0; i < 100; i++) {
                 result = await this.sendSubcommandAndWaitAsync(new SC.ConfigureMCURequest(0x21, 0, 3));
-                this.debugPrint('RESULT', result);
                 if (result.data[0] == 0xff && result.data[1] == 0xff) {
                     // Probably the device is not connected
                     return false;
@@ -216,7 +214,7 @@ class Joycon extends EventEmitter {
                 if (result.data[0] == 0x01 && result.data[1] == 0x32) {
                     if (result.data[7] == 0x03) {
                         // Probably the device is ready
-                        this.debugPrint('device ready');
+                        this.logger.verbose('device ready');
                         break;
                     }
                 }
@@ -227,14 +225,12 @@ class Joycon extends EventEmitter {
             // 21 21 1 1
             // send: 01 0e 00 01 40 40 00 01 40 40 21 21 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f3
             result = await this.sendSubcommandAndWaitAsync(new SC.ConfigureMCURequest(0x21, 1, 1));
-            this.debugPrint('RESULT', result);
 
             // need sleep?
             await sleep(300);
 
             // 59 external device info
             result = await this.sendSubcommandAndWaitAsync(new SC.GetExternalDeviceInfo());
-            this.debugPrint('RESULT', result);
 
             // need sleep?
             await sleep(200);
@@ -244,11 +240,11 @@ class Joycon extends EventEmitter {
                 this.emit(EXT_DEVICE_CONNECTED, deviceType);
                 //return this.initializeExternalDevice(result.data[1] as Byte);
             } else {
-                console.error('Failed to initialize external device:', result.data[0]);
+                this.logger.error('Failed to initialize external device:', result.data[0]);
                 return false;
             }
         } catch (e) {
-            console.error('Error initializing external device', e);
+            this.logger.error('Error initializing external device', e);
             return false;
         }
     }
@@ -260,6 +256,8 @@ class Joycon extends EventEmitter {
 
         const extDeviceInitialized = (report.connectionInfo & 0x01) === 0x01;
         const extDevicePreviouslyInitialized = (this.previousState?.connectionInfo & 0x01) === 0x01;
+        const previousDeviceType = this.previousState?.connectionInfo & 0x6;
+        const deviceType = report.connectionInfo & 0x6;
         const noDevice = (report.connectionInfo & 0x6) === 0x6;
         const maybeJoycon = report.connectionInfo & 0x8;
         const firstTime = this.previousState === null;
@@ -268,6 +266,10 @@ class Joycon extends EventEmitter {
 
         let detected = false;
         let removed = false;
+
+        if (stateChanged) {
+            this.logger.debug(`connectionInfo: ${report.connectionInfo}`);
+        }
 
         if (!maybeJoycon) {
             // do nothing
@@ -278,33 +280,30 @@ class Joycon extends EventEmitter {
             }
         } else if (stateChanged) {
             if (maybeJoycon) {
-                if (!noDevice && !extDeviceInitialized) {
-                    // Has an ext device and not initialized yet
-                    detected = true;
-                } else if (!extDeviceInitialized && extDevicePreviouslyInitialized) {
+                if (!extDeviceInitialized && extDevicePreviouslyInitialized && previousDeviceType === deviceType) {
                     // Ext device newly uninitialized
                     removed = true;
+                } else if (!noDevice && !extDeviceInitialized) {
+                    // Has an ext device and not initialized yet
+                    detected = true;
                 }
             }
         }
 
         try {
             if (detected) {
-                this.debugPrint(
-                    'Device connection detected:',
-                    this.previousState?.connectionInfo,
-                    'to',
-                    report.connectionInfo
+                this.logger.verbose(
+                    `Device connection detected: ${this.previousState?.connectionInfo} to ${report.connectionInfo}`
                 );
-                console.log('External device detected. Initializing...');
+                this.logger.info('External device detected. Initializing...');
                 this.findExternalDevice();
             } else if (removed) {
-                this.debugPrint('Device disconnected');
+                this.logger.verbose('Device disconnected');
                 this.disposeExternalDevice();
                 this.emit(EXT_DEVICE_DISCONNECTED);
             }
         } catch (err) {
-            console.error('Error processing previous state', err);
+            this.logger.error('Error processing previous state', err);
         } finally {
             this.previousState = report;
         }
@@ -387,7 +386,7 @@ class Joycon extends EventEmitter {
     }
 
     async sendSubcommandAndWaitAsync<T extends SC.SubCommandReply>(subcommand: SC.RequestBase): Promise<T> {
-        this.debugPrint(`Sending subcommand ${subcommand}`);
+        this.logger.debug(`Sending subcommand ${subcommand}`);
         const callback = (resolve, reject) => {
             const timer = setTimeout(() => {
                 this.removeListenerForSubcommandReply(subcommand.id, subcommandCallback);
@@ -396,6 +395,7 @@ class Joycon extends EventEmitter {
 
             const subcommandCallback = (data: T) => {
                 clearTimeout(timer);
+                this.logger.debug(`Received subcommand ${data.id} reply: ${data.data.toString('hex')}`);
                 resolve(data);
             };
 
@@ -464,7 +464,7 @@ class Joycon extends EventEmitter {
     }
 
     private onError(err: Error): void {
-        console.error('Error received from device', err);
+        this.logger.error('Error received from device', err);
         this.close();
     }
 }

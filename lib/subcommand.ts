@@ -55,7 +55,7 @@ export abstract class RequestBase {
     }
 
     toString(): string {
-        return `${this.constructor.name}: ${this._data.toString('hex')}`;
+        return `${this.constructor.name}(0x${this.id.toString(16)}): ${this._data.toString('hex')}`;
     }
 }
 
