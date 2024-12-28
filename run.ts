@@ -6,7 +6,7 @@ import { ExternalDeviceType } from './lib/devices/base.js';
 import * as winston from 'winston';
 
 const logger = winston.createLogger({
-    level: 'info', //'debug',
+    level: 'debug', //'debug',
     format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
     transports: [new winston.transports.Console()]
 });

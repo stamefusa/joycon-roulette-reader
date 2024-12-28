@@ -1,6 +1,6 @@
-import crc8 from 'crc/crc8';
 import { Byte } from './common.js';
 import { DeviceType } from './joycon.js';
+import { crc8 } from './crc8.js';
 
 export class SubCommandReply {
     protected _ack: number;
