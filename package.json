@@ -11,7 +11,6 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "crc": "^4.3.2",
         "node-hid": "^3.1.2",
         "type-fest": "^4.30.2",
         "winston": "^3.17.0"
