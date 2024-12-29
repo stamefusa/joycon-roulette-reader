@@ -5,7 +5,7 @@
 Modify `run.ts` as you like and run the commands below.
 
 ```
-npm build && npm start
+npm run build && npm start
 ```
 
 ## License

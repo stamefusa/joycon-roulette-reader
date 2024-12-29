@@ -5,14 +5,12 @@ import * as IR from './reports.js';
 import { Byte } from './common.js';
 import { ExternalDevice } from './devices/base.js';
 import { setTimeout as sleep } from 'timers/promises';
+import { Rumble } from './rumble.js';
 import * as winston from 'winston';
 
 // JoyCon R
 const VENDOR_ID = 1406;
 const PRODUCT_ID = 8199;
-
-const defaultRumble = [0x00, 0x01, 0x40, 0x40];
-const nullRumble = [0x00, 0x00, 0x00, 0x00];
 
 const EXT_DEVICE_CONNECTED = 'ext_device_connected';
 const EXT_DEVICE_DISCONNECTED = 'ext_device_disconnected';
@@ -47,6 +45,11 @@ class Joycon extends EventEmitter {
     private _deviceType: DeviceType | null = null;
     private _firmwareVersion: string = '';
     private _logger: winston.Logger;
+
+    private commandQueue: Array<() => Promise<number>> = [];
+    private isProcessingQueue: boolean = false;
+
+    private rumbleQueue: Array<number[]> = [];
 
     constructor(opts: { logger?: winston.Logger }) {
         super();
@@ -211,7 +214,7 @@ class Joycon extends EventEmitter {
             await this.sendSubcommandAndWaitAsync(new SC.ConfigureMCURequest(0x21, 1, 1));
             await sleep(300);
 
-            await this.sendSubcommandAndWaitAsync(new SC.GetExternalDeviceInfo());
+            result = await this.sendSubcommandAndWaitAsync(new SC.GetExternalDeviceInfo());
             await sleep(200);
 
             if (result.data[0] == 0) {
@@ -246,7 +249,7 @@ class Joycon extends EventEmitter {
         let removed = false;
 
         if (stateChanged) {
-            this.logger.debug(`connectionInfo: ${report.connectionInfo}`);
+            this.logger.debug(`connectionInfo: ${this.previousState.connectionInfo} -> ${report.connectionInfo}`);
         }
 
         if (!maybeJoycon) {
@@ -258,10 +261,13 @@ class Joycon extends EventEmitter {
             }
         } else if (stateChanged) {
             if (maybeJoycon) {
-                if (!extDeviceInitialized && extDevicePreviouslyInitialized && previousDeviceType === deviceType) {
+                if (
+                    (!extDeviceInitialized && extDevicePreviouslyInitialized && previousDeviceType !== deviceType) ||
+                    (!extDeviceInitialized && !extDevicePreviouslyInitialized && noDevice)
+                ) {
                     // Ext device newly uninitialized
                     removed = true;
-                } else if (!noDevice && !extDeviceInitialized) {
+                } else if (!noDevice && !extDeviceInitialized && previousDeviceType !== deviceType) {
                     // Has an ext device and not initialized yet
                     detected = true;
                 }
@@ -356,18 +362,34 @@ class Joycon extends EventEmitter {
         this.removeListener(this.subcommandKey(id), callback);
     }
 
+    private async processQueue() {
+        if (this.isProcessingQueue || this.commandQueue.length === 0) {
+            return;
+        }
+
+        this.isProcessingQueue = true;
+        const command = this.commandQueue.shift();
+        if (command) {
+            await command();
+        }
+    }
+
     async sendSubcommandAndWaitAsync<T extends SC.SubCommandReply>(subcommand: SC.RequestBase): Promise<T> {
         this.logger.debug(`Sending subcommand ${subcommand}`);
         const callback = (resolve, reject) => {
             const timer = setTimeout(() => {
                 this.removeListenerForSubcommandReply(subcommand.id, subcommandCallback);
                 reject(`Timeout: No response to subcommand ${subcommand.id}`);
+                this.isProcessingQueue = false;
+                this.processQueue();
             }, 5000);
 
             const subcommandCallback = (data: T) => {
                 clearTimeout(timer);
                 this.logger.debug(`Received subcommand 0x${data.id.toString(16)} reply: ${data.data.toString('hex')}`);
                 resolve(data);
+                this.isProcessingQueue = false;
+                this.processQueue();
             };
 
             this.listenOnceForSubcommandReply(subcommand.id, subcommandCallback);
@@ -375,28 +397,36 @@ class Joycon extends EventEmitter {
 
         const promise = new Promise<T>(callback);
 
-        await this.sendSubcommandAsync(subcommand);
+        this.commandQueue.push(async () => {
+            return this.sendSubcommandAsync(subcommand);
+        });
+
+        this.processQueue();
         return promise;
     }
 
-    generateDefaultRumble(): number[] {
+    private generateRumbleData(rumble: Rumble = Rumble.defaultRumble): number[] {
         switch (this._deviceType) {
             case DeviceType.JOYCON_L:
-                return [...defaultRumble, ...nullRumble];
+                return [...rumble.data, ...Rumble.nullRumble.data];
             case DeviceType.JOYCON_R:
-                return [...nullRumble, ...defaultRumble];
+                return [...Rumble.nullRumble.data, ...rumble.data];
             case DeviceType.PRO_CONTROLLER:
-                return [...defaultRumble, ...defaultRumble];
+                return [...rumble.data, ...rumble.data];
             default:
-                return [...nullRumble, ...nullRumble];
+                return [...Rumble.nullRumble.data, ...Rumble.nullRumble.data];
         }
     }
 
     private async sendSubcommandAsync(subcommand: SC.RequestBase): Promise<number> {
-        return this.sendOutputReportAsync(0x01, [...this.generateDefaultRumble(), ...subcommand.getData()]);
+        return this.sendOutputReportAsync(0x01, [...this.generateRumbleData(), ...subcommand.getData()]);
     }
 
-    async sendRumbleAsync(rumble: number[] | Buffer = this.generateDefaultRumble()): Promise<number> {
+    async sendRumbleSingleAsync(rumble: Rumble): Promise<number> {
+        return this.sendOutputReportAsync(0x10, [...this.generateRumbleData(rumble)]);
+    }
+
+    async sendRumbleRawAsync(rumble: number[] | Buffer = this.generateRumbleData()): Promise<number> {
         return this.sendOutputReportAsync(0x10, rumble);
     }
 
@@ -406,6 +436,7 @@ class Joycon extends EventEmitter {
         }
 
         const rawData = Buffer.from([id, this.getNextPacketNumber(), ...data]);
+        //this.logger.debug(`Sending output report ${rawData.toString('hex')}`);
         return this.device!.write(rawData);
     }
 
@@ -414,7 +445,7 @@ class Joycon extends EventEmitter {
     }
 
     private onError(err: Error): void {
-        this.logger.error('Error received from device', err);
+        this.logger.error('Error received from device:', err);
         this.close();
     }
 }

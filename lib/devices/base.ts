@@ -34,31 +34,33 @@ export abstract class ExternalDevice extends EventEmitter {
 
     protected async sendRumbleOnConnected(): Promise<void> {
         // fixed to right joycon
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0xe8, 0x60, 0x4e, 0x69]);
-        await setTimeout(70);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x92, 0xe7, 0x57, 0xa6]);
-        await setTimeout(70);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x7e, 0xee, 0xa2, 0xaa]);
-        await setTimeout(3);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0xe8, 0x00, 0x47, 0x45]);
-        await setTimeout(13);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x85, 0xaf, 0xa9, 0x80]);
-        await setTimeout(7);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x74, 0x86, 0x00, 0x87]);
-        await setTimeout(37);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x0c, 0x1b, 0xba, 0x57]);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x80, 0x78, 0x60, 0x80]);
+        await setTimeout(25);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x00, 0x01, 0x3f, 0x72]);
         await setTimeout(8);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x7f, 0xc0, 0x9d, 0x84]);
-        await setTimeout(33);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x75, 0xe0, 0x18, 0x85]);
-        await setTimeout(28);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0xec, 0x00, 0x4a, 0x44]);
-        await setTimeout(29);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0xe8, 0x00, 0xc2, 0x42]);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x00, 0x01, 0x52, 0x72]);
+        await setTimeout(35);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x72, 0x98, 0x61, 0xb2]);
+        await setTimeout(13);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x92, 0xf8, 0x63, 0xae]);
+        await setTimeout(25);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x00, 0x01, 0x49, 0x6a]);
+        await setTimeout(23);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x8e, 0xb8, 0x60, 0xab]);
         await setTimeout(15);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x9c, 0x18, 0x00, 0x80]);
-        await setTimeout(7);
-        await this.joycon.sendRumbleAsync([0, 0, 0, 0, 0, 0x00, 0x01, 0x40, 0x40]);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x6c, 0x18, 0x62, 0xb2]);
+        await setTimeout(26);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x8e, 0xd8, 0xe0, 0x8a]);
+        await setTimeout(5);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x90, 0x18, 0x61, 0x91]);
+        await setTimeout(11);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x00, 0x01, 0xc4, 0x46]);
+        await setTimeout(20);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x90, 0x78, 0x61, 0x87]);
+        await setTimeout(2);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0x8c, 0x18, 0x62, 0x81]);
+        await setTimeout(10);
+        await this.joycon.sendRumbleRawAsync([0, 0, 0, 0, 0, 1, 0x40, 0x40]);
     }
 
     disconnect() {}
