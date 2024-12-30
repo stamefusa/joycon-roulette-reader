@@ -5,6 +5,8 @@ import * as IR from '../reports.js';
 export class RingconDevice extends ExternalDevice {
     private currentCallback: (data: IR.StandardFullReport) => Promise<void> | null = null;
 
+    static readonly deviceName: string = 'Ringcon';
+
     constructor(joycon: Joycon) {
         super(joycon);
     }
@@ -13,12 +15,7 @@ export class RingconDevice extends ExternalDevice {
         return 0x20;
     }
 
-    static override get deviceName(): string {
-        return 'Ringcon';
-    }
-
-    override async initialize(): Promise<boolean> {
-        this.logger.verbose('========== Initializing Ringcon ==========');
+    override async initializeImpl(): Promise<boolean> {
         // enable IMU
         await this.joycon.sendSubcommandAndWaitAsync(new SC.EnableIMU6AxisSensorRequest(3));
 

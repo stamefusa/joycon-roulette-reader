@@ -190,9 +190,6 @@ class Joycon extends EventEmitter {
                 new SC.SetMCUStateRequest(SC.MCUState.RESUME)
             );
 
-            // need sleep?
-            await sleep(200);
-
             // Enable MCU ext device and wait for status
             for (let i = 0; i < 100; i++) {
                 result = await this.sendSubcommandAndWaitAsync(new SC.ConfigureMCURequest(0x21, 0, 3));
@@ -208,7 +205,7 @@ class Joycon extends EventEmitter {
                     }
                 }
 
-                await sleep(300);
+                await sleep(150);
             }
 
             await this.sendSubcommandAndWaitAsync(new SC.ConfigureMCURequest(0x21, 1, 1));
@@ -240,6 +237,7 @@ class Joycon extends EventEmitter {
         const previousDeviceType = this.previousState?.connectionInfo & 0x6;
         const deviceType = report.connectionInfo & 0x6;
         const noDevice = (report.connectionInfo & 0x6) === 0x6;
+        const previouslyNoDevice = (this.previousState?.connectionInfo & 0x6) === 0x6;
         const maybeJoycon = report.connectionInfo & 0x8;
         const firstTime = this.previousState === null;
 
@@ -261,7 +259,9 @@ class Joycon extends EventEmitter {
             }
         } else if (stateChanged) {
             if (maybeJoycon) {
-                if (
+                if (previouslyNoDevice && !noDevice && !extDeviceInitialized) {
+                    detected = true;
+                } else if (
                     (!extDeviceInitialized && extDevicePreviouslyInitialized && previousDeviceType !== deviceType) ||
                     (!extDeviceInitialized && !extDevicePreviouslyInitialized && noDevice)
                 ) {

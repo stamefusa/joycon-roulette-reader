@@ -9,6 +9,8 @@ export class RouletteDevice extends ExternalDevice {
     private currentCallback: (data: IR.StandardFullReport) => Promise<void> | null = null;
     private previousNumbers: number[] = [];
 
+    static readonly deviceName: string = 'Roulette';
+
     constructor(joycon: Joycon) {
         super(joycon);
     }
@@ -17,16 +19,11 @@ export class RouletteDevice extends ExternalDevice {
         return ExternalDeviceType.ROULETTE;
     }
 
-    static override get deviceName(): string {
-        return 'Roulette';
-    }
-
     get number(): number {
         return this.currentNumber;
     }
 
-    override async initialize(): Promise<boolean> {
-        this.joycon.logger.verbose('========== Initializing Roulette ==========');
+    override async initializeImpl(): Promise<boolean> {
         // enable IMU - move to Joycon class?
         await this.joycon.sendSubcommandAndWaitAsync(new SC.EnableIMU6AxisSensorRequest(3));
 
