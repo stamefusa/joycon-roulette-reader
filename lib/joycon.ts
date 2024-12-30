@@ -48,8 +48,8 @@ class Joycon extends EventEmitter {
 
     private commandQueue: Array<() => Promise<number>> = [];
     private isProcessingQueue: boolean = false;
-
     private rumbleQueue: Array<number[]> = [];
+    private isSendingRumble: boolean = false;
 
     constructor(opts: { logger?: winston.Logger }) {
         super();
@@ -295,6 +295,7 @@ class Joycon extends EventEmitter {
 
     private processStandardBase(info: IR.StandardReportBase): void {
         this.setPreviousReport(info);
+        this.processRumbleQueue();
     }
 
     private processStandard(info: IR.StandardReport): void {
@@ -422,8 +423,33 @@ class Joycon extends EventEmitter {
         return this.sendOutputReportAsync(0x01, [...this.generateRumbleData(), ...subcommand.getData()]);
     }
 
-    async sendRumbleSingleAsync(rumble: Rumble): Promise<number> {
-        return this.sendOutputReportAsync(0x10, [...this.generateRumbleData(rumble)]);
+    async sendRumbleSingle(rumble: Rumble): Promise<void> {
+        this.rumbleQueue.push(this.generateRumbleData(rumble));
+        this.processRumbleQueue();
+    }
+
+    async sendRumbleDual(left: Rumble, right: Rumble): Promise<void> {
+        this.rumbleQueue.push([...left.data, ...right.data]);
+        this.processRumbleQueue();
+    }
+
+    async enqueueRumble(rumble: Rumble): Promise<void> {
+        this.rumbleQueue.push(this.generateRumbleData(rumble));
+        this.processRumbleQueue();
+    }
+
+    private async processRumbleQueue() {
+        if (this.isSendingRumble || this.rumbleQueue.length === 0) {
+            return;
+        }
+
+        this.isSendingRumble = true;
+        const rumble = this.rumbleQueue.shift();
+        if (rumble) {
+            const rawData = Buffer.from([0x10, this.getNextPacketNumber(), ...rumble]);
+            await this.device!.write(rawData);
+        }
+        this.isSendingRumble = false;
     }
 
     async sendRumbleRawAsync(rumble: number[] | Buffer = this.generateRumbleData()): Promise<number> {

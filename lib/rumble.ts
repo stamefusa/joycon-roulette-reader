@@ -3,11 +3,16 @@ const nullRumble = [0x00, 0x00, 0x00, 0x00];
 
 export class Rumble {
     private _data: Buffer | number[];
-    static fromValues(highFreq: number, highLevel: number, lowFreq: number, lowLevel: number) {
+    static fromValues(highFreq: number, highAmp: number, lowFreq: number, lowAmp: number) {
+        const highFreqByte = Math.round(Math.log2(highFreq/10.0)*32.0);
         throw new Error('Not implemented');
     }
 
     static fromBuffer(data: Buffer | number[] = defaultRumble): Rumble {
+        if (data.length !== 4) {
+            throw new Error('Invalid rumble data');
+        }
+
         const rumble = new Rumble();
         rumble._data = data;
 
