@@ -64,7 +64,7 @@ joycon.onDisconnected(() => {
 
 while (true) {
     logger.info('Finding JoyCon-R');
-    const devices = Joycon.findDevices();
+    const devices = await Joycon.findDevices();
     logger.verbose(JSON.stringify(devices));
 
     if (devices.length === 0) {
@@ -80,3 +80,15 @@ while (true) {
 
     break;
 }
+
+process.on('uncaughtException', (err) => {
+    if(joycon !== null) {
+        joycon.close();
+    }
+});
+
+process.on('exit', () => {
+    if(joycon !== null) {
+        joycon.close();
+    }
+});

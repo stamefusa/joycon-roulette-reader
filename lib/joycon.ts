@@ -1,4 +1,4 @@
-import { HID, devices as findHIDDevices } from 'node-hid';
+import { HID, HIDAsync, devices as findHIDDevices, devicesAsync } from 'node-hid';
 import { EventEmitter } from 'events';
 import * as SC from './subcommand.js';
 import * as IR from './reports.js';
@@ -36,7 +36,7 @@ function convertByteToHexString(id: Byte): string {
 }
 
 class Joycon extends EventEmitter {
-    private device: HID | null = null;
+    private device: HIDAsync | null = null;
     private packetNumber: number = 0;
     private previousState: IR.StandardReportBase | null = null;
     private initialized: boolean = false;
@@ -62,8 +62,8 @@ class Joycon extends EventEmitter {
             });
     }
 
-    static findDevices(): DeviceInfo[] {
-        const devices = findHIDDevices();
+    static async findDevices(): Promise<DeviceInfo[]> {
+        const devices = await devicesAsync();
         for (const device of devices) {
             //
             if (device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID) {
@@ -84,7 +84,7 @@ class Joycon extends EventEmitter {
         }
 
         try {
-            this.device = new HID(deviceInfo.vendorId, deviceInfo.productId);
+            this.device = await HIDAsync.open(deviceInfo.vendorId, deviceInfo.productId);
             this.device.on('data', this.dataReceived.bind(this));
             this.device.on('error', this.onError.bind(this));
 
@@ -420,7 +420,7 @@ class Joycon extends EventEmitter {
     }
 
     private async sendSubcommandAsync(subcommand: SC.RequestBase): Promise<number> {
-        return this.sendOutputReportAsync(0x01, [...this.generateRumbleData(), ...subcommand.getData()]);
+        return this.sendOutputReportAsync(0x01, [...this.generateRumbleData(), ...subcommand.getData()]); 
     }
 
     async sendRumbleSingle(rumble: Rumble): Promise<void> {
