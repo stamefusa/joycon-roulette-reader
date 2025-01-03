@@ -1,4 +1,4 @@
-import { HID, HIDAsync, devices as findHIDDevices, devicesAsync } from 'node-hid';
+import { HIDAsync, devicesAsync } from 'node-hid';
 import { EventEmitter } from 'events';
 import * as SC from './subcommand.js';
 import * as IR from './reports.js';
@@ -507,10 +507,6 @@ class Joycon extends EventEmitter {
 
         this.logger.debug(`Sending output report: ${data.toString('hex')}`);
         const sent = await this.device.write(data);
-
-        if (sent !== data.length) {
-            this.logger.warn(`Could not send all data. Only sent ${sent} bytes of ${data.length} bytes.`);
-        }
 
         return sent;
     }
