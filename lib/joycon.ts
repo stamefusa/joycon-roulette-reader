@@ -18,6 +18,7 @@ const EXT_DEVICE_DISCONNECTED = 'ext_device_disconnected';
 interface DeviceInfo {
     vendorId: number;
     productId: number;
+    path?: string;
 }
 
 enum ExternalDeviceType {
@@ -35,6 +36,16 @@ function convertByteToHexString(id: Byte): string {
     return ('00' + id).slice(-2);
 }
 
+class Packet {
+    id: number;
+    data: Buffer;
+
+    constructor(id: number, data: Buffer) {
+        this.id = id;
+        this.data = data;
+    }
+}
+
 class Joycon extends EventEmitter {
     private device: HIDAsync | null = null;
     private packetNumber: number = 0;
@@ -46,10 +57,11 @@ class Joycon extends EventEmitter {
     private _firmwareVersion: string = '';
     private _logger: winston.Logger;
 
-    private commandQueue: Array<() => Promise<number>> = [];
+    private packetQueue: Array<Packet> = [];
     private isProcessingQueue: boolean = false;
     private rumbleQueue: Array<number[]> = [];
     private isSendingRumble: boolean = false;
+    private inSync: boolean = false;
 
     constructor(opts: { logger?: winston.Logger }) {
         super();
@@ -84,7 +96,12 @@ class Joycon extends EventEmitter {
         }
 
         try {
-            this.device = await HIDAsync.open(deviceInfo.vendorId, deviceInfo.productId);
+            if (deviceInfo.path) {
+                this.device = await HIDAsync.open(deviceInfo.path);
+            } else {
+                this.device = await HIDAsync.open(deviceInfo.vendorId, deviceInfo.productId);
+            }
+
             this.device.on('data', this.dataReceived.bind(this));
             this.device.on('error', this.onError.bind(this));
 
@@ -94,7 +111,7 @@ class Joycon extends EventEmitter {
             return false;
         }
 
-        return Promise.resolve(true);
+        return true;
     }
 
     private async initializeDevice() {
@@ -152,13 +169,15 @@ class Joycon extends EventEmitter {
         await this.sendSubcommandAndWaitAsync(new SC.ReadSPI(0x6020, 0x18));
     }
 
-    close(): void {
+    async close(): Promise<void> {
         this.emit('disconnected');
-        if (this.device !== null) {
-            this.device.close();
+        try {
+            if (this.device !== null) {
+                await this.device.close();
+            }
+        } finally {
+            this.device = null;
         }
-
-        this.device = null;
     }
 
     private dataReceived(data: Buffer): void {
@@ -173,6 +192,9 @@ class Joycon extends EventEmitter {
                 return;
             case 0x31:
                 this.processMCU(new IR.MCUReport(data));
+                break;
+            case 0x3f:
+                this.inSync = false;
                 break;
             case 0x63:
                 this.logger.warn('Maybe reconnect request?', type, data);
@@ -204,15 +226,18 @@ class Joycon extends EventEmitter {
                         break;
                     }
                 }
-
-                await sleep(150);
             }
 
             await this.sendSubcommandAndWaitAsync(new SC.ConfigureMCURequest(0x21, 1, 1));
-            await sleep(300);
+
+            for (let i = 0; i < 100; i++) {
+                if ((this.previousState?.connectionInfo & 0x01) === 0x01) {
+                    break;
+                }
+                await sleep(100);
+            }
 
             result = await this.sendSubcommandAndWaitAsync(new SC.GetExternalDeviceInfo());
-            await sleep(200);
 
             if (result.data[0] == 0) {
                 const deviceType = result.data[1] as ExternalDeviceType;
@@ -295,7 +320,7 @@ class Joycon extends EventEmitter {
 
     private processStandardBase(info: IR.StandardReportBase): void {
         this.setPreviousReport(info);
-        this.processRumbleQueue();
+        this.processQueue();
     }
 
     private processStandard(info: IR.StandardReport): void {
@@ -306,11 +331,13 @@ class Joycon extends EventEmitter {
     }
 
     private processMCU(info: IR.MCUReport): void {
+        this.inSync = true;
         this.emit('mcu', info);
         this.processStandardFull(info);
     }
 
     private processStandardFull(info: IR.StandardFullReport): void {
+        this.inSync = true;
         this.emit('standardFull', info);
         this.processStandardBase(info);
     }
@@ -364,14 +391,31 @@ class Joycon extends EventEmitter {
     }
 
     private async processQueue() {
-        if (this.isProcessingQueue || this.commandQueue.length === 0) {
+        if (this.isProcessingQueue) {
+            return;
+        }
+
+        let rumbleData: number[] = null;
+        const hasRumble = this.rumbleQueue.length > 0;
+
+        if (hasRumble) {
+            rumbleData = this.rumbleQueue.shift();
+        } else {
+            rumbleData = this.generateRumbleData();
+        }
+
+        if (this.packetQueue.length === 0) {
+            if (hasRumble) {
+                await this.sendRumbleImmediatelyAsync(rumbleData);
+            }
             return;
         }
 
         this.isProcessingQueue = true;
-        const command = this.commandQueue.shift();
-        if (command) {
-            await command();
+        const data = this.packetQueue.shift();
+        if (data) {
+            const rawData = Buffer.from([data.id, this.getNextPacketNumber(), ...rumbleData, ...data.data]);
+            await this.sendDataInternal(rawData);
         }
     }
 
@@ -397,12 +441,8 @@ class Joycon extends EventEmitter {
         };
 
         const promise = new Promise<T>(callback);
+        await this.sendSubcommandAsync(subcommand);
 
-        this.commandQueue.push(async () => {
-            return this.sendSubcommandAsync(subcommand);
-        });
-
-        this.processQueue();
         return promise;
     }
 
@@ -419,51 +459,60 @@ class Joycon extends EventEmitter {
         }
     }
 
-    private async sendSubcommandAsync(subcommand: SC.RequestBase): Promise<number> {
-        return this.sendOutputReportAsync(0x01, [...this.generateRumbleData(), ...subcommand.getData()]); 
+    // Send packet immediately
+    private async sendSubcommandAsync(subcommand: SC.RequestBase): Promise<void> {
+        return this.sendOutputReportAsync(0x01, [...subcommand.getData()]);
     }
 
-    async sendRumbleSingle(rumble: Rumble): Promise<void> {
-        this.rumbleQueue.push(this.generateRumbleData(rumble));
-        this.processRumbleQueue();
-    }
-
-    async sendRumbleDual(left: Rumble, right: Rumble): Promise<void> {
-        this.rumbleQueue.push([...left.data, ...right.data]);
-        this.processRumbleQueue();
-    }
-
-    async enqueueRumble(rumble: Rumble): Promise<void> {
-        this.rumbleQueue.push(this.generateRumbleData(rumble));
-        this.processRumbleQueue();
-    }
-
-    private async processRumbleQueue() {
-        if (this.isSendingRumble || this.rumbleQueue.length === 0) {
+    sendRumbleSingle(rumble: Rumble): void {
+        if (!this.inSync) {
             return;
         }
+        this.rumbleQueue.push(this.generateRumbleData(rumble));
+    }
 
-        this.isSendingRumble = true;
-        const rumble = this.rumbleQueue.shift();
-        if (rumble) {
-            const rawData = Buffer.from([0x10, this.getNextPacketNumber(), ...rumble]);
-            await this.device!.write(rawData);
+    sendRumbleDual(left: Rumble, right: Rumble): void {
+        if (!this.inSync) {
+            return;
         }
-        this.isSendingRumble = false;
+        this.rumbleQueue.push([...left.data, ...right.data]);
     }
 
-    async sendRumbleRawAsync(rumble: number[] | Buffer = this.generateRumbleData()): Promise<number> {
-        return this.sendOutputReportAsync(0x10, rumble);
+    async sendRumbleImmediatelyAsync(rumble: number[] | Buffer = this.generateRumbleData()): Promise<void> {
+        const rawData = Buffer.from([0x10, this.getNextPacketNumber(), ...rumble]);
+        await this.sendDataInternal(rawData);
     }
 
-    async sendOutputReportAsync(id: number, data: Buffer | number[]): Promise<number> {
+    // data: parameters without rumble
+    async sendOutputReportAsync(id: number, data: Buffer | number[]): Promise<void> {
         if (this.device === null) {
             return;
         }
 
-        const rawData = Buffer.from([id, this.getNextPacketNumber(), ...data]);
-        //this.logger.debug(`Sending output report ${rawData.toString('hex')}`);
-        return this.device!.write(rawData);
+        if (!this.inSync) {
+            // Send packet immediately unless in the initial sync phase
+            const rawData = Buffer.from([id, this.getNextPacketNumber(), ...this.generateRumbleData(), ...data]);
+            this.logger.debug(`Sending output report immediately`);
+            await this.sendDataInternal(rawData);
+            return;
+        }
+
+        this.packetQueue.push(new Packet(id, Buffer.from(data)));
+    }
+
+    private async sendDataInternal(data: Buffer): Promise<number> {
+        if (this.device === null) {
+            return;
+        }
+
+        this.logger.debug(`Sending output report: ${data.toString('hex')}`);
+        const sent = await this.device.write(data);
+
+        if (sent !== data.length) {
+            this.logger.warn(`Could not send all data. Only sent ${sent} bytes of ${data.length} bytes.`);
+        }
+
+        return sent;
     }
 
     private getNextPacketNumber(): number {

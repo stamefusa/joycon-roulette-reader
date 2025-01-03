@@ -6,7 +6,7 @@ import { ExternalDeviceType } from './lib/devices/base.js';
 import * as winston from 'winston';
 
 const logger = winston.createLogger({
-    level: 'debug', //'debug',
+    level: 'info', //'debug',
     format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
     transports: [new winston.transports.Console()]
 });
@@ -16,7 +16,7 @@ let rouletteDevice: RouletteDevice;
 let ringconDevice: RingconDevice;
 
 function onRouletteNumber(rawNumber: number, stableNumber: number) {
-    logger.info(`number: ${stableNumber}`);
+    logger.info(`number: ${rawNumber}`);
     // or read the number from RouletteDevice instance from whereever you want
     // console.log('number:', rouletteDevice.number);
 }
@@ -82,13 +82,14 @@ while (true) {
 }
 
 process.on('uncaughtException', (err) => {
-    if(joycon !== null) {
+    logger.error('There was an uncaught exception', err);
+    if (joycon !== null) {
         joycon.close();
     }
 });
 
 process.on('exit', () => {
-    if(joycon !== null) {
+    if (joycon !== null) {
         joycon.close();
     }
 });

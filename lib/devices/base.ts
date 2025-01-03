@@ -27,7 +27,7 @@ export abstract class ExternalDevice extends EventEmitter {
 
     async initialize(): Promise<boolean> {
         this.joycon.logger.verbose(`Initializing ${this.static.deviceName}`);
-        const promise = this.initializeImpl();
+        const promise = await this.initializeImpl();
         this.joycon.logger.verbose(`${this.static.deviceName} is ready`);
         return promise;
     }
