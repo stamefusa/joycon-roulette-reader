@@ -5,8 +5,16 @@ import { RingconDevice } from './lib/devices/ringcon.js';
 import { ExternalDeviceType } from './lib/devices/base.js';
 import * as winston from 'winston';
 
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const app = express();
+const server = createServer(app);
+const io = new Server(server);
+
 const logger = winston.createLogger({
-    level: 'info', //'debug',
+    level: 'debug', //'debug',
     format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
     transports: [new winston.transports.Console()]
 });
@@ -14,11 +22,39 @@ const joycon = new Joycon({ logger });
 
 let rouletteDevice: RouletteDevice;
 let ringconDevice: RingconDevice;
+let rouletteNumber: number;
+let lastStableNumber: number;
+let stableFrameCount: number = 0;
+let rouletteStoppedLogged: boolean = false;
+let hasRouletteChanged: boolean = false;
 
 function onRouletteNumber(rawNumber: number, stableNumber: number) {
-    logger.info(`number: ${rawNumber}`);
+    //logger.info(`number: ${rawNumber}`);
+    //logger.info(`number: ${stableNumber}`);
+    
+    // ルーレット停止判定
+    if (lastStableNumber === stableNumber) {
+        stableFrameCount++;
+        // 一度でも変化した後で、20フレーム変化がなければルーレット停止と判定
+        if (hasRouletteChanged && stableFrameCount >= 20 && !rouletteStoppedLogged) {
+            logger.info(`Roulette stopped at: ${stableNumber}`);
+            rouletteStoppedLogged = true;
+        }
+    } else {
+        stableFrameCount = 0;
+        rouletteStoppedLogged = false;
+        if (lastStableNumber !== undefined) {
+            hasRouletteChanged = true;
+        }
+        lastStableNumber = stableNumber;
+    }
+    
     // or read the number from RouletteDevice instance from whereever you want
     // console.log('number:', rouletteDevice.number);
+    if (rouletteNumber != stableNumber) {
+        io.emit('sensor-update', stableNumber); // クライアントに値を送信
+        rouletteNumber = stableNumber;
+    }
 }
 
 function onRingconPower(power: number) {
@@ -49,6 +85,11 @@ joycon.onExternalDeviceDisconnected(() => {
     if (rouletteDevice) {
         rouletteDevice.dispose();
         rouletteDevice = null;
+        // ルーレット関連の変数をリセット
+        lastStableNumber = undefined;
+        stableFrameCount = 0;
+        rouletteStoppedLogged = false;
+        hasRouletteChanged = false;
     }
 
     if (ringconDevice) {
@@ -60,6 +101,17 @@ joycon.onExternalDeviceDisconnected(() => {
 joycon.onDisconnected(() => {
     logger.info('JoyCon disconnected');
     rouletteDevice = ringconDevice = null;
+});
+
+// 静的ファイルを配信
+app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+    res.sendFile('public/index.html');
+});
+
+server.listen(3000, () => {
+    console.log('Server is running on http://localhost:3000');
 });
 
 while (true) {

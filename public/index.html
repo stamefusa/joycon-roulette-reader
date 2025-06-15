@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dynamic Image Display</title>
+</head>
+<body>
+    <div style="text-align: center">
+        <img id="sensorImage" src="1.jpg" alt="Sensor Image">
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const imgElement = document.getElementById('sensorImage');
+
+        // サーバーから送られてきたセンサー値に応じて画像を変更
+        socket.on('sensor-update', (value) => {
+            let imgSrc = '';
+            imgSrc = value + '.jpg';
+            imgElement.src = imgSrc;
+           console.log("VALUE: " + imgSrc);
+        });
+    </script>
+</body>
+</html>
