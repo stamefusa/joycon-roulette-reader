@@ -27,6 +27,7 @@ let lastStableNumber: number;
 let stableFrameCount: number = 0;
 let rouletteStoppedLogged: boolean = false;
 let hasRouletteChanged: boolean = false;
+let rouletteStopCount: number = 0;
 
 function onRouletteNumber(rawNumber: number, stableNumber: number) {
     //logger.info(`number: ${rawNumber}`);
@@ -39,6 +40,10 @@ function onRouletteNumber(rawNumber: number, stableNumber: number) {
         if (hasRouletteChanged && stableFrameCount >= 20 && !rouletteStoppedLogged) {
             logger.info(`Roulette stopped at: ${stableNumber}`);
             rouletteStoppedLogged = true;
+            rouletteStopCount++;
+            
+            // APIリクエストを送信
+            sendApiRequest(stableNumber % 10, (rouletteStopCount - 1)% 5);
         }
     } else {
         stableFrameCount = 0;
@@ -54,6 +59,17 @@ function onRouletteNumber(rawNumber: number, stableNumber: number) {
     if (rouletteNumber != stableNumber) {
         io.emit('sensor-update', stableNumber); // クライアントに値を送信
         rouletteNumber = stableNumber;
+    }
+}
+
+async function sendApiRequest(row: number, column: number) {
+    try {
+        const url = `http://localhost:8080/mark?row=${row}&column=${column}`;
+        const response = await fetch(url);
+        const responseText = await response.text();
+        logger.info(`API Response: ${responseText}`);
+    } catch (error) {
+        logger.error(`API Request failed: ${error.message}`);
     }
 }
 
@@ -90,6 +106,7 @@ joycon.onExternalDeviceDisconnected(() => {
         stableFrameCount = 0;
         rouletteStoppedLogged = false;
         hasRouletteChanged = false;
+        rouletteStopCount = 0;
     }
 
     if (ringconDevice) {
