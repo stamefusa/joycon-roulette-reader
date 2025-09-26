@@ -43,7 +43,13 @@ function onRouletteNumber(rawNumber: number, stableNumber: number) {
             rouletteStopCount++;
             
             // APIリクエストを送信
-            sendApiRequest(stableNumber % 10, (rouletteStopCount - 1)% 5);
+            const apiNumber = stableNumber % 10;
+            // 7以上の目を無効化するときは以下のコメントアウトを外す
+            // let apiNumber = stableNumber % 10;
+            // if (apiNumber >= 7 && apiNumber <= 10) {
+            //     apiNumber = Math.floor(Math.random() * 6) + 1;
+            // }
+            sendApiRequest(apiNumber, (rouletteStopCount - 1)% 5);
         }
     } else {
         stableFrameCount = 0;
